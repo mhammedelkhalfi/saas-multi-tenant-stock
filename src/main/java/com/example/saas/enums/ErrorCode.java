@@ -1,0 +1,14 @@
+package com.example.saas.enums;
+
+public enum ErrorCode {
+    NOT_FOUND,
+    DUPLICATE_RESOURCE,
+    INVALID_REQUEST,
+    VALIDATION_ERROR,
+    UNAUTHORIZED,
+    FORBIDDEN,
+    TENANT_PROVISIONING_ERROR,
+    DATA_INTEGRITY_ERROR,
+    METHOD_NOT_ALLOWED,
+    INTERNAL_ERROR
+}

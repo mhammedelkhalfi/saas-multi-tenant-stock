@@ -1,0 +1,23 @@
+services:
+  postgres:
+    image: postgres:17.5
+    container_name: saas-db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-saas-db}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "${DB_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - saas-app-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+networks:
+  saas-app-network:
+    driver: bridge

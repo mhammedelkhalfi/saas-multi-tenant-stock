@@ -65,6 +65,16 @@ app:
     rate-limit:
       auth-max-requests: ${AUTH_RATE_LIMIT_MAX:10}
       auth-window-seconds: ${AUTH_RATE_LIMIT_WINDOW:60}
+  system-admin:
+    enabled: ${SYSTEM_ADMIN_ENABLED:true}
+    username: ${SYSTEM_ADMIN_USERNAME:platform-admin}
+    password: ${SYSTEM_ADMIN_PASSWORD:PlatformAdmin@123}
+    email: ${SYSTEM_ADMIN_EMAIL:platform-admin@system.local}
+    first-name: ${SYSTEM_ADMIN_FIRST_NAME:Platform}
+    last-name: ${SYSTEM_ADMIN_LAST_NAME:Administrator}
+    tenant-company-code: ${SYSTEM_TENANT_CODE:system}
+    tenant-company-name: ${SYSTEM_TENANT_NAME:System Platform}
+    tenant-email: ${SYSTEM_TENANT_EMAIL:system@platform.local}
 
 springdoc:
   default-produces-media-type: application/json

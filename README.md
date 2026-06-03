@@ -97,11 +97,10 @@ docker compose up -d
 
 **a) Variables d'environnement**
 
-```bash
-cp .env.example .env
-```
+Éditez le fichier **`.env`** à la racine du projet (chargé automatiquement au démarrage).  
+Ce fichier **n'est pas versionné** (secrets locaux).
 
-Éditez `.env` avec vos valeurs. Ce fichier **n'est pas versionné** (secrets locaux).
+> Premier clone ? Copiez le template : `cp .env.example .env` puis adaptez les valeurs.
 
 **b) Clés JWT (RS256)**
 
@@ -127,6 +126,35 @@ openssl rsa -in src/main/resources/certs/private_key.pem -pubout -out src/main/r
 Ou depuis IntelliJ : exécuter `SaasMultiTenantAppApplication`.
 
 L'API est disponible sur : **http://localhost:8080**
+
+### 5. Compte admin système (automatique)
+
+Au **premier démarrage**, l'application crée automatiquement :
+
+- un tenant système (`companyCode: system`, statut `ACTIVE`)
+- un utilisateur **`ROLE_PLATFORM_ADMIN`** pour administrer la plateforme (gestion des tenants)
+
+| Variable | Défaut | Description |
+|----------|--------|-------------|
+| `SYSTEM_ADMIN_ENABLED` | `true` | Activer/désactiver l'initialisation |
+| `SYSTEM_ADMIN_USERNAME` | `platform-admin` | Identifiant de connexion |
+| `SYSTEM_ADMIN_PASSWORD` | `PlatformAdmin@123` | Mot de passe (à changer en prod) |
+| `SYSTEM_ADMIN_EMAIL` | `platform-admin@system.local` | Email admin |
+
+**Connexion :**
+
+```http
+POST /api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "platform-admin",
+  "password": "PlatformAdmin@123"
+}
+```
+
+> L'initialisation est **idempotente** : si le username existe déjà, rien n'est recréé.  
+> **Production** : définissez un mot de passe fort via `SYSTEM_ADMIN_PASSWORD` dans `.env` avant le premier démarrage.
 
 ---
 
@@ -387,7 +415,7 @@ client.activate();
 | `.env` | Mots de passe DB, config locale |
 | `certs/*.pem` | Clés privées/publiques JWT |
 
-Utilisez `.env.example` comme modèle pour la configuration.
+Utilisez le fichier **`.env`** pour la configuration locale.
 
 > En production : `COOKIE_SECURE=true`, HTTPS, clés JWT dédiées par environnement, secrets via variables CI/CD (GitHub Secrets, etc.).
 
@@ -412,8 +440,11 @@ Fichier principal : `src/main/resources/application.yml`
 | `COOKIE_SECURE`               | `false`             | Cookie Secure flag (HTTPS)     |
 | `AUTH_RATE_LIMIT_MAX`         | `10`                | Max requêtes auth par fenêtre  |
 | `AUTH_RATE_LIMIT_WINDOW`      | `60`                | Fenêtre rate limit (secondes)  |
+| `SYSTEM_ADMIN_ENABLED`        | `true`              | Création auto admin plateforme |
+| `SYSTEM_ADMIN_USERNAME`       | `platform-admin`    | Username admin système         |
+| `SYSTEM_ADMIN_PASSWORD`       | `PlatformAdmin@123` | Mot de passe admin système     |
 
-Voir `.env.example` pour un modèle complet.
+Voir **`.env`** (ou `.env.example` comme template) pour la liste complète des variables.
 
 ---
 

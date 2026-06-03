@@ -1,19 +1,26 @@
 package com.example.saas.services.impl;
 
 import com.example.saas.common.PageResponse;
+import com.example.saas.config.TenantContext;
 import com.example.saas.entities.Product;
 import com.example.saas.entities.StockMvt;
+import com.example.saas.enums.PriorityType;
+import com.example.saas.enums.TypeNotification;
 import com.example.saas.exceptions.ResourceNotFoundException;
 import com.example.saas.mappers.StockMvtMapper;
+import com.example.saas.request.NotificationRequest;
 import com.example.saas.request.StockMvtRequest;
 import com.example.saas.response.StockMvtResponse;
 import com.example.saas.respositories.ProductRepositorie;
 import com.example.saas.respositories.StockMvtRepositorie;
+import com.example.saas.services.NotificationService;
 import com.example.saas.services.StockMvtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +33,7 @@ public class StockMvtServiceImpl implements StockMvtService {
     private final StockMvtRepositorie stockMvtRepositorie;
     private final ProductRepositorie productRepositorie;
     private final StockMvtMapper stockMvtMapper;
+    private final NotificationService notificationService;
 
     @Override
     public void create(StockMvtRequest request) {
@@ -33,7 +41,35 @@ public class StockMvtServiceImpl implements StockMvtService {
                 .orElseThrow(() -> new ResourceNotFoundException("Product Not Found.."));
         final StockMvt stockMvt = stockMvtMapper.toEntity(request);
         stockMvt.setProduct(product);
-        stockMvtRepositorie.save(stockMvt);
+        final StockMvt saved = stockMvtRepositorie.save(stockMvt);
+        notifyStockMovement(saved, product);
+    }
+
+    private void notifyStockMovement(final StockMvt stockMvt, final Product product) {
+        final Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            return;
+        }
+        final String userId = authentication.getName();
+        final String tenantId = TenantContext.getCurrentTenant();
+        if (tenantId == null) {
+            return;
+        }
+
+        notificationService.sendToUser(userId, NotificationRequest.builder()
+                .tenantId(tenantId)
+                .typeNotification(TypeNotification.STOCK_MOVEMENT)
+                .title("Mouvement de stock")
+                .message(String.format(
+                        "%s : %d unités — produit « %s »",
+                        stockMvt.getTypeMvt(),
+                        stockMvt.getQuantity(),
+                        product.getName()
+                ))
+                .resourceType("STOCK_MVT")
+                .resourceId(stockMvt.getId())
+                .priority(PriorityType.MEDIUM)
+                .build());
     }
 
     @Override

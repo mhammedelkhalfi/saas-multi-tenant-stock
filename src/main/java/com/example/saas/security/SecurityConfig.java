@@ -34,6 +34,7 @@ public class SecurityConfig {
     private static final String[] PUBLIC_URLS = {
             "/api/v1/auth/login",
             "/api/v1/auth/refresh",
+            "/ws/**",
             "/v2/api-docs",
             "/v3/api-docs",
             "/v3/api-docs/**",
@@ -71,7 +72,8 @@ public class SecurityConfig {
                         .csrfTokenRequestHandler(requestHandler)
                         .ignoringRequestMatchers(
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/refresh"
+                                "/api/v1/auth/refresh",
+                                "/ws/**"
                         )
                 )
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))

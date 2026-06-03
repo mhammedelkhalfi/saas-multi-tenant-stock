@@ -1,7 +1,7 @@
 # SaaS Multi-Tenant App
 
 Application **SaaS multi-tenant** de gestion de stock, développée avec **Spring Boot 4** et **PostgreSQL**.  
-Chaque entreprise (tenant) dispose de son propre schéma de base de données, avec authentification JWT, gestion des utilisateurs et API REST documentées.
+Chaque entreprise (tenant) dispose de son propre schéma de base de données, avec authentification JWT, gestion des utilisateurs, **notifications temps réel** (WebSocket STOMP) et API REST documentées.
 
 ---
 
@@ -14,6 +14,7 @@ Chaque entreprise (tenant) dispose de son propre schéma de base de données, av
 - Gestion des **tenants** (approbation, activation, suspension)
 - Gestion des **utilisateurs** et rôles (`ROLE_COMPANY_ADMIN`, `ROLE_ADMINISTRATOR`, etc.)
 - CRUD **catégories**, **produits**, **mouvements de stock** (IN / OUT)
+- **Notifications temps réel** via WebSocket STOMP (push instantané + historique REST)
 - Pagination et recherche avec `PageResponse`
 - Migrations **Flyway**
 - Documentation **Swagger / OpenAPI**
@@ -31,6 +32,7 @@ Chaque entreprise (tenant) dispose de son propre schéma de base de données, av
 | Base de données  | PostgreSQL 17                        |
 | Migrations       | Flyway                               |
 | Sécurité         | Spring Security + JWT (jjwt)         |
+| Temps réel       | WebSocket STOMP (Spring Messaging)   |
 | Documentation    | SpringDoc OpenAPI 3                  |
 | Build            | Maven                                |
 | Conteneurisation | Docker Compose                       |
@@ -41,17 +43,18 @@ Chaque entreprise (tenant) dispose de son propre schéma de base de données, av
 
 ```
 src/main/java/com/example/saas/
-├── config/          # Multi-tenant, JPA, beans
+├── config/          # Multi-tenant, JPA, WebSocket STOMP
 ├── controllers/     # REST API
 ├── entities/        # Entités JPA
-├── enums/           # Rôles, statuts, types de mouvement
+├── enums/           # Rôles, statuts, types de mouvement, notifications
 ├── exceptions/      # Exceptions métier + GlobalExceptionHandler
 ├── mappers/         # DTO ↔ Entity
+├── notification/    # Destinations STOMP (/queue, /topic)
 ├── properties/      # Configuration JWT & sécurité
 ├── repositories/    # Spring Data JPA
 ├── request/         # DTOs entrée
 ├── response/        # DTOs sortie
-├── security/        # JWT, filtres, SecurityConfig
+├── security/        # JWT, filtres, SecurityConfig, JwtStompChannelInterceptor
 └── services/        # Logique métier
 ```
 
@@ -62,6 +65,7 @@ src/main/java/com/example/saas/
 - `categories` — catégories produits (par tenant)
 - `products` — produits avec référence, prix, seuil d'alerte
 - `stock_mvts` — mouvements de stock (`IN` / `OUT`)
+- `notifications` — notifications utilisateur (type, priorité, lu/non lu, lien ressource)
 
 ---
 
@@ -260,6 +264,93 @@ Même structure que les catégories (`/search`, pagination, CRUD).
 | GET     | `/`                | Liste paginée                        |
 | GET     | `/search?keyword=` | Recherche (commentaire, produit)     |
 
+> La création d'un mouvement de stock déclenche automatiquement une notification `STOCK_MOVEMENT` pour l'utilisateur connecté.
+
+### Notifications — `/api/v1/notifications`
+
+| Méthode | Endpoint           | Description                              |
+|---------|--------------------|------------------------------------------|
+| GET     | `/`                | Liste paginée (utilisateur connecté)   |
+| GET     | `/unread-count`    | Nombre de notifications non lues         |
+| PATCH   | `/{id}/read`       | Marquer une notification comme lue       |
+| PATCH   | `/read-all`        | Tout marquer comme lu                    |
+| DELETE  | `/{id}`            | Supprimer (soft delete)                  |
+
+**Exemple de réponse (`NotificationResponse`) :**
+
+```json
+{
+  "id": "...",
+  "userId": "...",
+  "tenantId": "...",
+  "typeNotification": "STOCK_MOVEMENT",
+  "title": "Mouvement de stock",
+  "message": "IN : 10 unités — produit « Laptop »",
+  "resourceType": "STOCK_MVT",
+  "resourceId": "...",
+  "priority": "MEDIUM",
+  "read": false,
+  "readAt": null,
+  "createdAt": "2026-06-03T14:30:00"
+}
+```
+
+**Types de notification :** `STOCK_ALERT`, `STOCK_MOVEMENT`, `TENANT_STATUS`, `USER_STATUS`, `SYSTEM`  
+**Priorités :** `LOW`, `MEDIUM`, `HIGH`
+
+---
+
+## Notifications temps réel (WebSocket STOMP)
+
+Les notifications sont **persistées en base** puis **poussées en temps réel** via WebSocket.
+
+### Flux
+
+```
+Événement métier (ex. mouvement stock)
+  → NotificationService.sendToUser()
+  → INSERT en PostgreSQL
+  → SimpMessagingTemplate → client WebSocket
+```
+
+### Connexion
+
+| Paramètre    | Valeur                                      |
+|--------------|---------------------------------------------|
+| Endpoint     | `ws://localhost:8080/ws` (SockJS supporté)  |
+| Protocole    | STOMP                                       |
+| Auth CONNECT | Header `Authorization: Bearer <accessToken>` |
+
+### Destinations STOMP
+
+| Destination                               | Usage                                      |
+|-------------------------------------------|--------------------------------------------|
+| `/user/queue/notifications`               | Notifications privées (par utilisateur)    |
+| `/topic/tenant/{tenantId}/notifications`  | Broadcast tenant (tableau de bord équipe)  |
+
+### Exemple client (JavaScript)
+
+```javascript
+import { Client } from '@stomp/stompjs';
+import SockJS from 'sockjs-client';
+
+const client = new Client({
+  webSocketFactory: () => new SockJS('http://localhost:8080/ws'),
+  connectHeaders: {
+    Authorization: 'Bearer ' + accessToken
+  },
+  onConnect: () => {
+    client.subscribe('/user/queue/notifications', (message) => {
+      const notification = JSON.parse(message.body);
+      console.log('Nouvelle notification', notification);
+    });
+  }
+});
+client.activate();
+```
+
+> Si le client est déconnecté, l'historique reste accessible via `GET /api/v1/notifications`.
+
 ---
 
 ## Rôles utilisateur
@@ -286,6 +377,8 @@ Même structure que les catégories (`/search`, pagination, CRUD).
 | **Headers HTTP**    | HSTS, X-Frame-Options, Referrer-Policy              |
 | **SQL injection**   | Requêtes JPA paramétrées                            |
 | **CORS**            | Configurable dans `SecurityConfig`                |
+| **WebSocket JWT**   | Auth au frame STOMP `CONNECT` (`JwtStompChannelInterceptor`) |
+| **CSRF WebSocket**  | `/ws/**` exempté du CSRF (auth JWT au CONNECT)    |
 
 ### Fichiers exclus du dépôt Git
 
@@ -368,10 +461,13 @@ docker compose up -d
 
 ## Roadmap
 
+- [x] Notifications temps réel (WebSocket STOMP + API REST)
+- [ ] Alertes stock automatiques (`STOCK_ALERT` quand `availableQuantity <= alertThreshold`)
+- [ ] Broker externe (RabbitMQ / Redis) pour scaling multi-instances
 - [ ] Enregistrement tenant via API publique
 - [ ] Blacklist Redis (multi-instances)
-- [ ] Tests d'intégration auth & multi-tenant
-- [ ] Dashboard alertes stock (seuil `alert_threshold`)
+- [ ] Tests d'intégration auth, multi-tenant & WebSocket
+- [ ] Frontend React (dashboard + cloche notifications)
 
 ---
 

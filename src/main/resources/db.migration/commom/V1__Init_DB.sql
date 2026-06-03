@@ -99,3 +99,26 @@ CREATE TABLE public.stock_mvts
     product_id VARCHAR(255)
         CONSTRAINT fk_product_id REFERENCES public.products (id)
 );
+
+CREATE TABLE public.notifications (
+                                      id            VARCHAR(255) NOT NULL PRIMARY KEY,
+                                      created_at    TIMESTAMP(6) NOT NULL,
+                                      created_by    VARCHAR(255) NOT NULL,
+                                      deleted       BOOLEAN      NOT NULL,
+                                      updated_at    TIMESTAMP(6),
+                                      updated_by    VARCHAR(255),
+                                      user_id       VARCHAR(255) NOT NULL,
+                                      tenant_id     VARCHAR(255) NOT NULL,
+                                      type          VARCHAR(255) NOT NULL,
+                                      title         VARCHAR(255) NOT NULL,
+                                      message       TEXT,
+                                      resource_type VARCHAR(255),
+                                      resource_id   VARCHAR(255),
+                                      priority      VARCHAR(255) NOT NULL DEFAULT 'MEDIUM',
+                                      read          BOOLEAN      NOT NULL DEFAULT FALSE,
+                                      read_at       TIMESTAMP(6),
+                                      CONSTRAINT fk_notification_user FOREIGN KEY (user_id) REFERENCES public.users (id),
+                                      CONSTRAINT fk_notification_tenant FOREIGN KEY (tenant_id) REFERENCES public.tenants (id)
+);
+
+CREATE INDEX idx_notifications_user_tenant ON public.notifications (user_id, tenant_id, read);
